@@ -188,6 +188,7 @@ export default function Home() {
     console.log('Initializing user data for:', userId); // デバッグ用
     try {
       // ユーザーデータを取得
+      console.log('Fetching user data from database...');
       let userData;
       const { data: initialUserData, error: userError } = await supabase
         .from('users')
@@ -199,6 +200,7 @@ export default function Home() {
 
       // ユーザーデータが存在しない場合は作成
       if (userError && userError.code === 'PGRST116') {
+        console.log('User not found, creating new user...');
         const { data: newUser, error: createError } = await supabase
           .from('users')
           .insert([
@@ -211,6 +213,7 @@ export default function Home() {
           .select()
           .single();
 
+        console.log('User creation result:', { newUser, createError });
         if (createError) {
           console.error('Error creating user:', createError);
           return;
@@ -221,12 +224,15 @@ export default function Home() {
         return;
       } else {
         userData = initialUserData;
+        console.log('User data found:', userData);
       }
 
       if (userData) {
+        console.log('Setting total points:', userData.total_points);
         setTotalPoints(userData.total_points || 0);
         
         // 完了した行動を読み込み
+        console.log('Fetching completed actions...');
         const { data: actions, error: actionsError } = await supabase
           .from('completed_actions')
           .select('*')
@@ -234,12 +240,14 @@ export default function Home() {
           .order('completed_at', { ascending: false })
           .limit(10);
 
+        console.log('Actions fetch result:', { actions, actionsError });
         if (actionsError) {
           console.error('Error fetching actions:', actionsError);
           return;
         }
 
         if (actions) {
+          console.log('Setting completed actions:', actions.length, 'items');
           setCompletedActions(
             actions.map(action => ({
               title: action.title,
@@ -252,6 +260,7 @@ export default function Home() {
           );
         }
       }
+      console.log('User initialization completed successfully');
     } catch (error) {
       console.error('Error initializing user data:', error);
     }
