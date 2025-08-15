@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Mail, Lock, User, Target } from 'lucide-react';
+import { Mail, Lock, Target } from 'lucide-react';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -57,8 +57,9 @@ export default function AuthPage() {
           setIsLogin(true);
         }
       }
-    } catch (error: any) {
-      setMessage(error.message || 'エラーが発生しました');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'エラーが発生しました';
+      setMessage(errorMessage);
     } finally {
       setLoading(false);
     }

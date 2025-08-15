@@ -163,6 +163,7 @@ export default function Home() {
   }, []);
 
   const initializeUserData = async (userId: string) => {
+    console.log('Initializing user data for:', userId); // デバッグ用
     try {
       // ユーザーデータを取得
       let { data: userData, error: userError } = await supabase
@@ -170,6 +171,8 @@ export default function Home() {
         .select('*')
         .eq('id', userId)
         .single();
+
+      console.log('User data fetch result:', { userData, userError }); // デバッグ用
 
       // ユーザーデータが存在しない場合は作成
       if (userError && userError.code === 'PGRST116') {
