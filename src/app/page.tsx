@@ -134,16 +134,35 @@ export default function Home() {
 
   // 認証状態の確認
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        await initializeUserData(session.user.id, session.user.email || '');
-      } else {
-        // 未認証の場合は認証ページにリダイレクト
-        window.location.href = '/auth';
-      }
+    const timeoutId = setTimeout(() => {
+      console.log('Auth check timeout, redirecting to auth page');
       setAuthLoading(false);
+      window.location.href = '/auth';
+    }, 10000); // 10秒でタイムアウト
+
+    const checkAuth = async () => {
+      console.log('Starting auth check...'); // デバッグ用
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('Session result:', { session, error }); // デバッグ用
+        
+        if (session?.user) {
+          console.log('User found, initializing data...'); // デバッグ用
+          setUser(session.user);
+          await initializeUserData(session.user.id, session.user.email || '');
+        } else {
+          console.log('No user session, redirecting to auth...'); // デバッグ用
+          // 未認証の場合は認証ページにリダイレクト
+          window.location.href = '/auth';
+        }
+      } catch (error) {
+        console.error('Auth check error:', error); // デバッグ用
+        window.location.href = '/auth';
+      } finally {
+        console.log('Setting authLoading to false'); // デバッグ用
+        clearTimeout(timeoutId);
+        setAuthLoading(false);
+      }
     };
 
     checkAuth();
@@ -159,7 +178,9 @@ export default function Home() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -338,13 +359,19 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  // 認証確認中のローディング
+  // 認証確認中のローディング（タイムアウト付き）
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-500">読み込み中...</p>
+          <button 
+            onClick={() => window.location.href = '/auth'}
+            className="mt-4 text-gray-400 hover:text-gray-600 text-sm underline"
+          >
+            認証ページに移動
+          </button>
         </div>
       </div>
     );
