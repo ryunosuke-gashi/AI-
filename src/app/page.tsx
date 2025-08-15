@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, Clock, MapPin, Trophy, Check, Target, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
@@ -138,7 +138,7 @@ export default function Home() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUser(session.user);
-        await initializeUserData(session.user.id);
+        await initializeUserData(session.user.id, session.user.email || '');
       } else {
         // 未認証の場合は認証ページにリダイレクト
         window.location.href = '/auth';
@@ -152,7 +152,7 @@ export default function Home() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         setUser(session.user);
-        await initializeUserData(session.user.id);
+        await initializeUserData(session.user.id, session.user.email || '');
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         window.location.href = '/auth';
@@ -160,19 +160,21 @@ export default function Home() {
     });
 
     return () => subscription.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const initializeUserData = async (userId: string) => {
+  const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
     console.log('Initializing user data for:', userId); // デバッグ用
     try {
       // ユーザーデータを取得
-      let { data: userData, error: userError } = await supabase
+      let userData;
+      const { data: initialUserData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
 
-      console.log('User data fetch result:', { userData, userError }); // デバッグ用
+      console.log('User data fetch result:', { initialUserData, userError }); // デバッグ用
 
       // ユーザーデータが存在しない場合は作成
       if (userError && userError.code === 'PGRST116') {
@@ -181,7 +183,7 @@ export default function Home() {
           .insert([
             {
               id: userId,
-              email: user?.email,
+              email: userEmail,
               total_points: 0
             }
           ])
@@ -196,6 +198,8 @@ export default function Home() {
       } else if (userError) {
         console.error('Error fetching user:', userError);
         return;
+      } else {
+        userData = initialUserData;
       }
 
       if (userData) {
@@ -230,7 +234,7 @@ export default function Home() {
     } catch (error) {
       console.error('Error initializing user data:', error);
     }
-  };
+  }, []);
 
   const getAction = () => {
     if (!timeSelect || !locationSelect) {
