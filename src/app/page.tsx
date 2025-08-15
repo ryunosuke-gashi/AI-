@@ -132,35 +132,75 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
 
+  const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
+    try {
+      // ユーザーデータを取得
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      // ユーザーデータが存在しない場合は作成
+      if (userError && userError.code === 'PGRST116') {
+        const { data: newUser } = await supabase
+          .from('users')
+          .insert([
+            {
+              id: userId,
+              email: userEmail,
+              total_points: 0
+            }
+          ])
+          .select()
+          .single();
+
+        if (newUser) {
+          setTotalPoints(newUser.total_points || 0);
+        }
+      } else if (userData) {
+        setTotalPoints(userData.total_points || 0);
+      }
+
+      // 完了した行動を読み込み
+      const { data: actions } = await supabase
+        .from('completed_actions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('completed_at', { ascending: false })
+        .limit(10);
+
+      if (actions) {
+        setCompletedActions(
+          actions.map(action => ({
+            title: action.title,
+            description: action.description,
+            difficulty: action.difficulty,
+            points: action.points,
+            timestamp: new Date(action.completed_at).toLocaleString(),
+            id: action.id
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('Error initializing user data:', error);
+    }
+  }, []);
+
   // 認証状態の確認
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      console.log('Auth check timeout, redirecting to auth page');
-      setAuthLoading(false);
-      window.location.href = '/auth';
-    }, 10000); // 10秒でタイムアウト
-
     const checkAuth = async () => {
-      console.log('Starting auth check...'); // デバッグ用
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        console.log('Session result:', { session, error }); // デバッグ用
-        
+        const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          console.log('User found, initializing data...'); // デバッグ用
           setUser(session.user);
           await initializeUserData(session.user.id, session.user.email || '');
         } else {
-          console.log('No user session, redirecting to auth...'); // デバッグ用
-          // 未認証の場合は認証ページにリダイレクト
           window.location.href = '/auth';
         }
       } catch (error) {
-        console.error('Auth check error:', error); // デバッグ用
         window.location.href = '/auth';
       } finally {
-        console.log('Setting authLoading to false'); // デバッグ用
-        clearTimeout(timeoutId);
         setAuthLoading(false);
       }
     };
@@ -178,107 +218,8 @@ export default function Home() {
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
-    console.log('Initializing user data for:', userId); // デバッグ用
-    console.log('Environment check:', {
-      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      urlPreview: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...'
-    });
-    
-    try {
-      // ユーザーデータを取得
-      console.log('Fetching user data from database...');
-      
-      // タイムアウト付きでデータベースアクセス
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-      
-      const dbPromise = supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-      
-      const result = await Promise.race([dbPromise, timeoutPromise]);
-      const { data: initialUserData, error: userError } = result as any;
-      
-      console.log('User data fetch result:', { initialUserData, userError }); // デバッグ用
-
-      let userData;
-      // ユーザーデータが存在しない場合は作成
-      if (userError && userError.code === 'PGRST116') {
-        console.log('User not found, creating new user...');
-        const { data: newUser, error: createError } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: userId,
-              email: userEmail,
-              total_points: 0
-            }
-          ])
-          .select()
-          .single();
-
-        console.log('User creation result:', { newUser, createError });
-        if (createError) {
-          console.error('Error creating user:', createError);
-          return;
-        }
-        userData = newUser;
-      } else if (userError) {
-        console.error('Error fetching user:', userError);
-        return;
-      } else {
-        userData = initialUserData;
-        console.log('User data found:', userData);
-      }
-
-      if (userData) {
-        console.log('Setting total points:', userData.total_points);
-        setTotalPoints(userData.total_points || 0);
-        
-        // 完了した行動を読み込み
-        console.log('Fetching completed actions...');
-        const { data: actions, error: actionsError } = await supabase
-          .from('completed_actions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('completed_at', { ascending: false })
-          .limit(10);
-
-        console.log('Actions fetch result:', { actions, actionsError });
-        if (actionsError) {
-          console.error('Error fetching actions:', actionsError);
-          return;
-        }
-
-        if (actions) {
-          console.log('Setting completed actions:', actions.length, 'items');
-          setCompletedActions(
-            actions.map(action => ({
-              title: action.title,
-              description: action.description,
-              difficulty: action.difficulty,
-              points: action.points,
-              timestamp: new Date(action.completed_at).toLocaleString(),
-              id: action.id
-            }))
-          );
-        }
-      }
-      console.log('User initialization completed successfully');
-    } catch (error) {
-      console.error('Error initializing user data:', error);
-    }
   }, []);
 
   const getAction = () => {
@@ -324,7 +265,7 @@ export default function Home() {
 
     try {
       // 完了した行動をデータベースに保存
-      const { data, error: insertError } = await supabase
+      const { data } = await supabase
         .from('completed_actions')
         .insert([
           {
@@ -338,22 +279,12 @@ export default function Home() {
         .select()
         .single();
 
-      if (insertError) {
-        console.error('Error saving action:', insertError);
-        alert('保存中にエラーが発生しました。もう一度お試しください。');
-        return;
-      }
-
       // ユーザーのポイントを更新
       const newTotalPoints = totalPoints + currentAction.points;
-      const { error: updateError } = await supabase
+      await supabase
         .from('users')
         .update({ total_points: newTotalPoints })
         .eq('id', user.id);
-
-      if (updateError) {
-        console.error('Error updating points:', updateError);
-      }
 
       // 状態を更新
       setTotalPoints(newTotalPoints);
@@ -368,7 +299,6 @@ export default function Home() {
 
       setCurrentAction(null);
       
-      // 成功フィードバック
       setTimeout(() => {
         alert(`🎉 お疲れさまでした！ ${currentAction.points}ポイント獲得！`);
       }, 100);
@@ -383,19 +313,13 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  // 認証確認中のローディング（タイムアウト付き）
+  // 認証確認中のローディング
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-500">読み込み中...</p>
-          <button 
-            onClick={() => window.location.href = '/auth'}
-            className="mt-4 text-gray-400 hover:text-gray-600 text-sm underline"
-          >
-            認証ページに移動
-          </button>
         </div>
       </div>
     );
