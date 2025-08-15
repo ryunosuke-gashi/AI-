@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronDown, Clock, MapPin, Trophy, Check, Target } from 'lucide-react';
+import { ChevronDown, Clock, MapPin, Trophy, Check, Target, LogOut } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 interface Action {
   title: string;
@@ -122,51 +123,93 @@ const actions: Record<string, Action[]> = {
 };
 
 export default function Home() {
+  const [user, setUser] = useState<User | null>(null);
   const [timeSelect, setTimeSelect] = useState('');
   const [locationSelect, setLocationSelect] = useState('');
   const [currentAction, setCurrentAction] = useState<Action | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
   const [completedActions, setCompletedActions] = useState<CompletedAction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  // データベースからデータを読み込み
+  // 認証状態の確認
   useEffect(() => {
-    initializeUser();
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setUser(session.user);
+        await initializeUserData(session.user.id);
+      } else {
+        // 未認証の場合は認証ページにリダイレクト
+        window.location.href = '/auth';
+      }
+      setAuthLoading(false);
+    };
+
+    checkAuth();
+
+    // 認証状態の変更を監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setUser(session.user);
+        await initializeUserData(session.user.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        window.location.href = '/auth';
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const initializeUser = async () => {
+  const initializeUserData = async (userId: string) => {
     try {
-      // 既存ユーザーがいるかチェック（簡単な実装）
-      const { data: existingUsers } = await supabase
+      // ユーザーデータを取得
+      let { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
-        .limit(1);
+        .eq('id', userId)
+        .single();
 
-      let currentUser;
-      if (existingUsers && existingUsers.length > 0) {
-        currentUser = existingUsers[0];
-      } else {
-        // 新しいユーザーを作成
-        const { data: newUser } = await supabase
+      // ユーザーデータが存在しない場合は作成
+      if (userError && userError.code === 'PGRST116') {
+        const { data: newUser, error: createError } = await supabase
           .from('users')
-          .insert([{ total_points: 0 }])
+          .insert([
+            {
+              id: userId,
+              email: user?.email,
+              total_points: 0
+            }
+          ])
           .select()
           .single();
-        currentUser = newUser;
+
+        if (createError) {
+          console.error('Error creating user:', createError);
+          return;
+        }
+        userData = newUser;
+      } else if (userError) {
+        console.error('Error fetching user:', userError);
+        return;
       }
 
-      if (currentUser) {
-        setUserId(currentUser.id);
-        setTotalPoints(currentUser.total_points || 0);
+      if (userData) {
+        setTotalPoints(userData.total_points || 0);
         
         // 完了した行動を読み込み
-        const { data: actions } = await supabase
+        const { data: actions, error: actionsError } = await supabase
           .from('completed_actions')
           .select('*')
-          .eq('user_id', currentUser.id)
+          .eq('user_id', userId)
           .order('completed_at', { ascending: false })
           .limit(10);
+
+        if (actionsError) {
+          console.error('Error fetching actions:', actionsError);
+          return;
+        }
 
         if (actions) {
           setCompletedActions(
@@ -182,7 +225,7 @@ export default function Home() {
         }
       }
     } catch (error) {
-      console.error('Error initializing user:', error);
+      console.error('Error initializing user data:', error);
     }
   };
 
@@ -225,15 +268,15 @@ export default function Home() {
   };
 
   const completeAction = async () => {
-    if (!currentAction || !userId) return;
+    if (!currentAction || !user) return;
 
     try {
       // 完了した行動をデータベースに保存
-      const { data } = await supabase
+      const { data, error: insertError } = await supabase
         .from('completed_actions')
         .insert([
           {
-            user_id: userId,
+            user_id: user.id,
             title: currentAction.title,
             description: currentAction.description,
             difficulty: currentAction.difficulty,
@@ -243,12 +286,22 @@ export default function Home() {
         .select()
         .single();
 
+      if (insertError) {
+        console.error('Error saving action:', insertError);
+        alert('保存中にエラーが発生しました。もう一度お試しください。');
+        return;
+      }
+
       // ユーザーのポイントを更新
       const newTotalPoints = totalPoints + currentAction.points;
-      await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update({ total_points: newTotalPoints })
-        .eq('id', userId);
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error('Error updating points:', updateError);
+      }
 
       // 状態を更新
       setTotalPoints(newTotalPoints);
@@ -269,10 +322,31 @@ export default function Home() {
       }, 100);
 
     } catch (error) {
-      console.error('Error saving completion:', error);
+      console.error('Error completing action:', error);
       alert('保存中にエラーが発生しました。もう一度お試しください。');
     }
   };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  // 認証確認中のローディング
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 未認証の場合は何も表示しない（リダイレクト処理中）
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">      
@@ -281,11 +355,26 @@ export default function Home() {
           
           {/* Header */}
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-full mb-6">
-              <Target className="w-8 h-8 text-white" />
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex-1"></div>
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-full">
+                <Target className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1 flex justify-end">
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="ログアウト"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <h1 className="text-2xl font-light text-gray-900 mb-2 tracking-wide">行動</h1>
             <p className="text-gray-500 text-sm">空いた時間を意味のある行動に変える</p>
+            {user.email && (
+              <p className="text-gray-400 text-xs mt-2">{user.email}</p>
+            )}
           </div>
 
           {/* Points Display */}
