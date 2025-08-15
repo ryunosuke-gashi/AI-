@@ -186,18 +186,33 @@ export default function Home() {
 
   const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
     console.log('Initializing user data for:', userId); // デバッグ用
+    console.log('Environment check:', {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      urlPreview: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...'
+    });
+    
     try {
       // ユーザーデータを取得
       console.log('Fetching user data from database...');
-      let userData;
-      const { data: initialUserData, error: userError } = await supabase
+      
+      // タイムアウト付きでデータベースアクセス
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database timeout')), 5000)
+      );
+      
+      const dbPromise = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
-
+      
+      const result = await Promise.race([dbPromise, timeoutPromise]);
+      const { data: initialUserData, error: userError } = result as any;
+      
       console.log('User data fetch result:', { initialUserData, userError }); // デバッグ用
 
+      let userData;
       // ユーザーデータが存在しない場合は作成
       if (userError && userError.code === 'PGRST116') {
         console.log('User not found, creating new user...');
