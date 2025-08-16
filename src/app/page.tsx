@@ -218,12 +218,11 @@ export default function Home() {
   // 認証状態の確認
   useEffect(() => {
     const checkAuth = async () => {
-      console.log('🔍 Production Auth Check Started');
+      console.log('🔍 Testing new Supabase project');
       console.log('🔍 Environment check:');
       console.log('  - hasSupabaseUrl:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
       console.log('  - hasSupabaseKey:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
       console.log('  - URL preview:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30));
-      console.log('  - Key preview:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20));
       
       try {
         console.log('🔍 Getting user...');
@@ -237,7 +236,7 @@ export default function Home() {
         }
         
         if (user) {
-          console.log('🔍 User found, setting state and initializing...');
+          console.log('🔍 User found, initializing data...');
           setUser(user);
           await initializeUserData(user.id, user.email || '');
           console.log('🔍 Initialization completed');
@@ -258,11 +257,17 @@ export default function Home() {
 
     // 認証状態の変更を監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔍 Auth state changed:', event);
+      
       if (event === 'SIGNED_IN' && session?.user) {
+        console.log('🔍 User signed in, resetting initialization state');
+        setIsInitialized(false); // 重要: 再ログイン時はリセット
         setUser(session.user);
         await initializeUserData(session.user.id, session.user.email || '');
       } else if (event === 'SIGNED_OUT') {
+        console.log('🔍 User signed out, resetting state');
         setUser(null);
+        setIsInitialized(false); // サインアウト時もリセット
         window.location.href = '/auth';
       }
     });
@@ -359,6 +364,8 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
+    console.log('🔍 Logging out and resetting state');
+    setIsInitialized(false); // ログアウト時にリセット
     await supabase.auth.signOut();
   };
 
