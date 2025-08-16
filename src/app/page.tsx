@@ -144,12 +144,23 @@ export default function Home() {
     
     try {
       console.log('📊 Fetching user data from database...');
-      const { data: userData, error: userError } = await supabase
+      
+      // タイムアウト付きでクエリ実行
+      const queryPromise = supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
-
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database query timeout after 10 seconds')), 10000)
+      );
+      
+      console.log('📊 Starting database query with timeout...');
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      console.log('📊 Database query completed');
+      
+      const { data: userData, error: userError } = result as any;
       console.log('📊 User data result:', { hasData: !!userData, error: userError?.message });
 
       // ユーザーデータが存在しない場合は作成
@@ -209,10 +220,11 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       console.log('🔍 Production Auth Check Started');
-      console.log('🔍 Environment check:', {
-        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      });
+      console.log('🔍 Environment check:');
+      console.log('  - hasSupabaseUrl:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.log('  - hasSupabaseKey:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      console.log('  - URL preview:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30));
+      console.log('  - Key preview:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20));
       
       try {
         console.log('🔍 Getting user...');
