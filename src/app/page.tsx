@@ -143,24 +143,23 @@ export default function Home() {
     setIsInitialized(true);
     
     try {
-      console.log('📊 Fetching user data from database...');
+      // まず簡単な接続テスト
+      console.log('📊 Testing basic Supabase connection...');
+      const { data: testData, error: testError } = await supabase.from('users').select('count');
+      console.log('📊 Connection test result:', { testData, testError: testError?.message });
       
-      // タイムアウト付きでクエリ実行
-      const queryPromise = supabase
+      if (testError) {
+        console.error('📊 Basic connection failed:', testError);
+        throw testError;
+      }
+      
+      console.log('📊 Connection successful, fetching user data...');
+      const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database query timeout after 10 seconds')), 10000)
-      );
-      
-      console.log('📊 Starting database query with timeout...');
-      const result = await Promise.race([queryPromise, timeoutPromise]);
-      console.log('📊 Database query completed');
-      
-      const { data: userData, error: userError } = result as any;
+
       console.log('📊 User data result:', { hasData: !!userData, error: userError?.message });
 
       // ユーザーデータが存在しない場合は作成
