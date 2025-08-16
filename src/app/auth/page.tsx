@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Mail, Lock, Target } from 'lucide-react';
 
@@ -10,6 +10,24 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+
+  // 接続テスト用
+  useEffect(() => {
+    const testConnection = async () => {
+      console.log('🔗 Testing Supabase connection...');
+      console.log('🔗 URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
+      console.log('🔗 Key exists:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+      
+      try {
+        const { data, error } = await supabase.from('users').select('count', { count: 'exact' });
+        console.log('🔗 Connection test result:', { data, error });
+      } catch (err) {
+        console.error('🔗 Connection test failed:', err);
+      }
+    };
+    
+    testConnection();
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();

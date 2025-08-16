@@ -131,8 +131,15 @@ export default function Home() {
   const [completedActions, setCompletedActions] = useState<CompletedAction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false); // 初期化状態を追跡
 
   const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
+    if (isInitialized) {
+      return;
+    }
+    
+    setIsInitialized(true);
+    
     try {
       // ユーザーデータを取得
       const { data: userData, error: userError } = await supabase
@@ -184,17 +191,24 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error initializing user data:', error);
+      setIsInitialized(false);
     }
-  }, []);
+  }, [isInitialized]);
 
   // 認証状態の確認
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          setUser(session.user);
-          await initializeUserData(session.user.id, session.user.email || '');
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error) {
+          window.location.href = '/auth';
+          return;
+        }
+        
+        if (user) {
+          setUser(user);
+          await initializeUserData(user.id, user.email || '');
         } else {
           window.location.href = '/auth';
         }
