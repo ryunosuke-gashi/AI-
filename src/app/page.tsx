@@ -135,21 +135,26 @@ export default function Home() {
 
   const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
     if (isInitialized) {
+      console.log('📊 Already initialized, skipping...');
       return;
     }
     
+    console.log('📊 Starting user data initialization for:', userId);
     setIsInitialized(true);
     
     try {
-      // ユーザーデータを取得
+      console.log('📊 Fetching user data from database...');
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
 
+      console.log('📊 User data result:', { hasData: !!userData, error: userError?.message });
+
       // ユーザーデータが存在しない場合は作成
       if (userError && userError.code === 'PGRST116') {
+        console.log('📊 Creating new user...');
         const { data: newUser } = await supabase
           .from('users')
           .insert([
@@ -164,12 +169,14 @@ export default function Home() {
 
         if (newUser) {
           setTotalPoints(newUser.total_points || 0);
+          console.log('📊 New user created with points:', newUser.total_points);
         }
       } else if (userData) {
         setTotalPoints(userData.total_points || 0);
+        console.log('📊 Existing user loaded with points:', userData.total_points);
       }
 
-      // 完了した行動を読み込み
+      console.log('📊 Fetching completed actions...');
       const { data: actions } = await supabase
         .from('completed_actions')
         .select('*')
@@ -188,9 +195,12 @@ export default function Home() {
             id: action.id
           }))
         );
+        console.log('📊 Loaded', actions.length, 'completed actions');
       }
+      
+      console.log('📊 User data initialization completed successfully');
     } catch (error) {
-      console.error('Error initializing user data:', error);
+      console.error('📊 Error during initialization:', error);
       setIsInitialized(false);
     }
   }, [isInitialized]);
@@ -198,23 +208,37 @@ export default function Home() {
   // 認証状態の確認
   useEffect(() => {
     const checkAuth = async () => {
+      console.log('🔍 Production Auth Check Started');
+      console.log('🔍 Environment check:', {
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      });
+      
       try {
+        console.log('🔍 Getting user...');
         const { data: { user }, error } = await supabase.auth.getUser();
+        console.log('🔍 User result:', { hasUser: !!user, error: error?.message });
         
         if (error) {
+          console.error('🔍 Auth error:', error);
           window.location.href = '/auth';
           return;
         }
         
         if (user) {
+          console.log('🔍 User found, setting state and initializing...');
           setUser(user);
           await initializeUserData(user.id, user.email || '');
+          console.log('🔍 Initialization completed');
         } else {
+          console.log('🔍 No user found, redirecting...');
           window.location.href = '/auth';
         }
       } catch (error) {
+        console.error('🔍 Auth check error:', error);
         window.location.href = '/auth';
       } finally {
+        console.log('🔍 Setting authLoading to false');
         setAuthLoading(false);
       }
     };
