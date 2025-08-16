@@ -1,9 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, Clock, MapPin, Trophy, Check, Target, LogOut } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
-import type { User } from '@supabase/supabase-js';
+import { useState, useEffect } from 'react';
+import { ChevronDown, Clock, MapPin, Trophy, Check, Target } from 'lucide-react';
 
 interface Action {
   title: string;
@@ -123,158 +121,12 @@ const actions: Record<string, Action[]> = {
 };
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
   const [timeSelect, setTimeSelect] = useState('');
   const [locationSelect, setLocationSelect] = useState('');
   const [currentAction, setCurrentAction] = useState<Action | null>(null);
   const [totalPoints, setTotalPoints] = useState(0);
   const [completedActions, setCompletedActions] = useState<CompletedAction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false); // 初期化状態を追跡
-
-  const initializeUserData = useCallback(async (userId: string, userEmail?: string) => {
-    if (isInitialized) {
-      console.log('📊 Already initialized, skipping...');
-      return;
-    }
-    
-    console.log('📊 Starting user data initialization for:', userId);
-    setIsInitialized(true);
-    
-    try {
-      // まず簡単な接続テスト
-      console.log('📊 Testing basic Supabase connection...');
-      const { data: testData, error: testError } = await supabase.from('users').select('count');
-      console.log('📊 Connection test result:', { testData, testError: testError?.message });
-      
-      if (testError) {
-        console.error('📊 Basic connection failed:', testError);
-        throw testError;
-      }
-      
-      console.log('📊 Connection successful, fetching user data...');
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      console.log('📊 User data result:', { hasData: !!userData, error: userError?.message });
-
-      // ユーザーデータが存在しない場合は作成
-      if (userError && userError.code === 'PGRST116') {
-        console.log('📊 Creating new user...');
-        const { data: newUser } = await supabase
-          .from('users')
-          .insert([
-            {
-              id: userId,
-              email: userEmail,
-              total_points: 0
-            }
-          ])
-          .select()
-          .single();
-
-        if (newUser) {
-          setTotalPoints(newUser.total_points || 0);
-          console.log('📊 New user created with points:', newUser.total_points);
-        }
-      } else if (userData) {
-        setTotalPoints(userData.total_points || 0);
-        console.log('📊 Existing user loaded with points:', userData.total_points);
-      }
-
-      console.log('📊 Fetching completed actions...');
-      const { data: actions } = await supabase
-        .from('completed_actions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('completed_at', { ascending: false })
-        .limit(10);
-
-      if (actions) {
-        setCompletedActions(
-          actions.map(action => ({
-            title: action.title,
-            description: action.description,
-            difficulty: action.difficulty,
-            points: action.points,
-            timestamp: new Date(action.completed_at).toLocaleString(),
-            id: action.id
-          }))
-        );
-        console.log('📊 Loaded', actions.length, 'completed actions');
-      }
-      
-      console.log('📊 User data initialization completed successfully');
-    } catch (error) {
-      console.error('📊 Error during initialization:', error);
-      setIsInitialized(false);
-    }
-  }, [isInitialized]);
-
-  // 認証状態の確認
-  useEffect(() => {
-    const checkAuth = async () => {
-      console.log('🔍 Testing new Supabase project');
-      console.log('🔍 Environment check:');
-      console.log('  - hasSupabaseUrl:', !!process.env.NEXT_PUBLIC_SUPABASE_URL);
-      console.log('  - hasSupabaseKey:', !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-      console.log('  - URL preview:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30));
-      
-      try {
-        console.log('🔍 Getting user...');
-        const { data: { user }, error } = await supabase.auth.getUser();
-        console.log('🔍 User result:', { hasUser: !!user, error: error?.message });
-        
-        if (error) {
-          console.error('🔍 Auth error:', error);
-          window.location.href = '/auth';
-          return;
-        }
-        
-        if (user) {
-          console.log('🔍 User found, initializing data...');
-          setUser(user);
-          await initializeUserData(user.id, user.email || '');
-          console.log('🔍 Initialization completed');
-        } else {
-          console.log('🔍 No user found, redirecting...');
-          window.location.href = '/auth';
-        }
-      } catch (error) {
-        console.error('🔍 Auth check error:', error);
-        window.location.href = '/auth';
-      } finally {
-        console.log('🔍 Setting authLoading to false');
-        setAuthLoading(false);
-      }
-    };
-
-    checkAuth();
-
-    // 認証状態の変更を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔍 Auth state changed:', event);
-      
-      if (event === 'SIGNED_IN' && session?.user) {
-        console.log('🔍 User signed in, resetting initialization state');
-        setIsInitialized(false); // 重要: 再ログイン時はリセット
-        setUser(session.user);
-        await initializeUserData(session.user.id, session.user.email || '');
-      } else if (event === 'SIGNED_OUT') {
-        console.log('🔍 User signed out, resetting state');
-        setUser(null);
-        setIsInitialized(false); // サインアウト時もリセット
-        window.location.href = '/auth';
-      }
-    });
-
-    return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const getAction = () => {
     if (!timeSelect || !locationSelect) {
@@ -314,77 +166,45 @@ export default function Home() {
     }, 1200);
   };
 
-  const completeAction = async () => {
-    if (!currentAction || !user) return;
+  const completeAction = () => {
+    if (!currentAction) return;
 
-    try {
-      // 完了した行動をデータベースに保存
-      const { data } = await supabase
-        .from('completed_actions')
-        .insert([
-          {
-            user_id: user.id,
-            title: currentAction.title,
-            description: currentAction.description,
-            difficulty: currentAction.difficulty,
-            points: currentAction.points
-          }
-        ])
-        .select()
-        .single();
+    // ポイント加算（ローカルストレージに保存）
+    const newTotalPoints = totalPoints + currentAction.points;
+    setTotalPoints(newTotalPoints);
+    localStorage.setItem('totalPoints', newTotalPoints.toString());
 
-      // ユーザーのポイントを更新
-      const newTotalPoints = totalPoints + currentAction.points;
-      await supabase
-        .from('users')
-        .update({ total_points: newTotalPoints })
-        .eq('id', user.id);
+    // 完了履歴に追加
+    const newCompletedAction = {
+      ...currentAction,
+      timestamp: new Date().toLocaleString(),
+      id: Date.now().toString()
+    };
+    
+    const updatedActions = [newCompletedAction, ...completedActions];
+    setCompletedActions(updatedActions);
+    localStorage.setItem('completedActions', JSON.stringify(updatedActions.slice(0, 10)));
 
-      // 状態を更新
-      setTotalPoints(newTotalPoints);
-      setCompletedActions(prev => [
-        {
-          ...currentAction,
-          timestamp: new Date().toLocaleString(),
-          id: data?.id
-        },
-        ...prev
-      ]);
+    setCurrentAction(null);
+    
+    setTimeout(() => {
+      alert(`🎉 お疲れさまでした！ ${currentAction.points}ポイント獲得！`);
+    }, 100);
+  };
 
-      setCurrentAction(null);
-      
-      setTimeout(() => {
-        alert(`🎉 お疲れさまでした！ ${currentAction.points}ポイント獲得！`);
-      }, 100);
-
-    } catch (error) {
-      console.error('Error completing action:', error);
-      alert('保存中にエラーが発生しました。もう一度お試しください。');
+  // 初回読み込み時にローカルストレージからデータを復元
+  useEffect(() => {
+    const savedPoints = localStorage.getItem('totalPoints');
+    const savedActions = localStorage.getItem('completedActions');
+    
+    if (savedPoints) {
+      setTotalPoints(parseInt(savedPoints, 10));
     }
-  };
-
-  const handleLogout = async () => {
-    console.log('🔍 Logging out and resetting state');
-    setIsInitialized(false); // ログアウト時にリセット
-    await supabase.auth.signOut();
-  };
-
-  // 認証確認中のローディング
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-500">読み込み中...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // 未認証の場合は何も表示しない（リダイレクト処理中）
-  if (!user) {
-    return null;
-  }
+    
+    if (savedActions) {
+      setCompletedActions(JSON.parse(savedActions));
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">      
@@ -393,26 +213,11 @@ export default function Home() {
           
           {/* Header */}
           <div className="text-center mb-10">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex-1"></div>
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-full">
-                <Target className="w-8 h-8 text-white" />
-              </div>
-              <div className="flex-1 flex justify-end">
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                  title="ログアウト"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              </div>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-full mb-6">
+              <Target className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-2xl font-light text-gray-900 mb-2 tracking-wide">行動</h1>
             <p className="text-gray-500 text-sm">空いた時間を意味のある行動に変える</p>
-            {user.email && (
-              <p className="text-gray-400 text-xs mt-2">{user.email}</p>
-            )}
           </div>
 
           {/* Points Display */}
